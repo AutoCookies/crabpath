@@ -23,12 +23,12 @@ func NewClient(baseURL string) *Client {
 	return &Client{
 		baseURL: baseURL,
 		httpClient: &http.Client{
-			Timeout: 120 * time.Second, // LLM calls can be slow
+			Timeout: 120 * time.Second,
 		},
 	}
 }
 
-// ─── Request / Response types live here too for decoupling ───────────────────
+// ─── Request / Response types ─────────────────────────────────────────────────
 
 type Request struct {
 	Model    string    `json:"model"`
@@ -50,9 +50,48 @@ type Response struct {
 	} `json:"choices"`
 }
 
+// ─── Model discovery ──────────────────────────────────────────────────────────
+
+type modelListResponse struct {
+	Data []struct {
+		ID string `json:"id"`
+	} `json:"data"`
+}
+
+// GetActiveModel queries cheese-server for loaded models and returns the first
+// one. If none are loaded or the server is unreachable it returns "".
+func (c *Client) GetActiveModel(ctx context.Context) string {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/v1/models", nil)
+	if err != nil {
+		return ""
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil || resp.StatusCode != http.StatusOK {
+		return ""
+	}
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(resp.Body)
+	var list modelListResponse
+	if err := json.Unmarshal(raw, &list); err != nil || len(list.Data) == 0 {
+		return ""
+	}
+	return list.Data[0].ID
+}
+
+// ─── Chat completion ──────────────────────────────────────────────────────────
+
 // Complete sends a non-streaming chat completion to cheese-server and returns
-// the raw text of the first choice.
+// the raw text of the first choice. If req.Model is empty or "default", it
+// auto-detects the active model via GetActiveModel.
 func (c *Client) Complete(ctx context.Context, req Request) (string, error) {
+	if req.Model == "" || req.Model == "default" {
+		if active := c.GetActiveModel(ctx); active != "" {
+			req.Model = active
+		} else {
+			return "", fmt.Errorf("crabpath/llm: no model loaded in cheese-server — please select a model in AI Models space first")
+		}
+	}
+
 	body, err := json.Marshal(req)
 	if err != nil {
 		return "", fmt.Errorf("crabpath/llm: marshal: %w", err)

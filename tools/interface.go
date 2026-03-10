@@ -62,17 +62,26 @@ func (r *Registry) All() []CrabTool {
 	return out
 }
 
-// DefaultRegistry builds the canonical set of built-in tools.
-// Call this from the server to get a ready-to-use Registry.
 func DefaultRegistry(cheesecrabAddr string) *Registry {
 	r := NewRegistry()
+	// Core file ops
 	r.Register(NewReadFileTool())
 	r.Register(NewWriteFileTool())
 	r.Register(NewListDirTool())
+	// Rich OS / filesystem tools (Antigravity-style)
+	r.Register(NewGetFileInfoTool())
+	r.Register(NewListDirRecursiveTool())
+	r.Register(NewSearchFilesTool())
+	r.Register(NewFindFilesTool())
+	r.Register(NewCreateDirTool())
+	r.Register(NewDeleteFileTool())
+	// Shell & system
 	r.Register(NewShellTool())
 	r.Register(NewSysInfoTool())
+	// Model management
 	r.Register(NewListModelsTool(cheesecrabAddr))
 	r.Register(NewSwitchModelTool(cheesecrabAddr))
+	// Coding
 	r.Register(NewApplyDiffTool())
 	r.Register(NewGitTool())
 	return r
